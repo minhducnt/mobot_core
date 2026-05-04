@@ -1,0 +1,44 @@
+# ─── LaTeX build artifacts ───────────────────────────────────────────────────
+latex/*.aux
+latex/*.bbl
+latex/*.blg
+latex/*.log
+latex/*.out
+latex/*.toc
+latex/*.fls
+latex/*.fdb_latexmk
+latex/*.synctex.gz
+latex/*.pdf
+latex/_minted*/
+
+# ─── General OS files ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editor and IDE files ────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+
+# ─── Python (if any tooling scripts are added later) ─────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.env
+.venv/
+venv/
+
+# ─── Node (if any tooling scripts are added later) ───────────────────────────
+node_modules/
+npm-debug.log*
+
+# ─── Temporary files ─────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.log
