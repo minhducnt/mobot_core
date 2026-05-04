@@ -1,0 +1,418 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── Packages ────────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{natbib}
+
+% ─── Page style ──────────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{mobot\_core Research Report}
+\lhead{\leftmark}
+\cfoot{\thepage}
+\setlength{\headheight}{14pt}
+
+% ─── Hyperlink setup ─────────────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+    pdftitle={mobot\_core: Smartphone-Powered Robotics Research Report},
+    pdfauthor={mobot\_core Project},
+}
+
+% ─── Code listing style ──────────────────────────────────────────────────────
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{red},
+    commentstyle=\color{gray},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    breaklines=true,
+    frame=single,
+    captionpos=b,
+    tabsize=4,
+}
+
+% ─── Title ───────────────────────────────────────────────────────────────────
+\title{
+    \vspace{2cm}
+    \textbf{\Large mobot\_core} \\[0.5em]
+    \large Smartphone-Powered Robotics: \\
+    Research and Architecture Documentation \\[1em]
+    \normalsize Inspired by OpenBot: Turning Smartphones into Robots \\
+    \small \citep{openbot2021}
+}
+\author{mobot\_core Project}
+\date{2024}
+
+% ─── Document ────────────────────────────────────────────────────────────────
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\vfill
+\begin{abstract}
+    This report documents the research foundation of \texttt{mobot\_core}, a project exploring
+    the use of commodity smartphones as the central computing and sensing platform for
+    low-cost robotic systems. Inspired by the OpenBot project \citep{openbot2021}, which
+    demonstrated that a smartphone-equipped robot body costing approximately \$50 can perform
+    meaningful autonomous tasks, \texttt{mobot\_core} aims to document, understand, and
+    eventually implement this approach.
+
+    The report covers the background motivation for low-cost robotics, a detailed summary
+    of the OpenBot paper, the proposed system architecture, hardware and software design,
+    use cases, known limitations, and future implementation directions.
+\end{abstract}
+\vfill
+
+\newpage
+\tableofcontents
+\newpage
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Introduction}
+\label{sec:introduction}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Robotics research has historically been constrained by the high cost of capable hardware.
+A standard research robot combining a compute unit, sensors, actuators, and a power system
+can cost thousands to tens of thousands of dollars, placing serious robotics research beyond
+the reach of most individuals and many institutions.
+
+The central question that motivates \texttt{mobot\_core} is: \emph{Can we use the smartphone
+that billions of people already carry in their pockets as the brain of a functional robot?}
+
+Modern smartphones include remarkable sensing and computing capabilities:
+\begin{itemize}
+    \item High-resolution cameras (wide-angle, telephoto, depth)
+    \item Inertial Measurement Units (accelerometer + gyroscope + magnetometer)
+    \item GPS for outdoor localisation
+    \item Powerful System-on-Chip (SoC) with CPU, GPU, and Neural Processing Unit (NPU)
+    \item Wi-Fi, Bluetooth, and cellular connectivity
+    \item A large battery (3000--6000 mAh)
+    \item A mature operating system (Android) with rich software libraries
+\end{itemize}
+
+These capabilities are available in mid-range devices costing under \$100 — far less than
+equivalent dedicated embedded hardware. The OpenBot project demonstrated that attaching a
+smartphone to a simple \$50 robot body produces a system capable of person following and
+autonomous navigation \citep{openbot2021}.
+
+\texttt{mobot\_core} is a research and documentation project building on this foundation,
+aiming to produce a well-understood architecture and a roadmap for a future implementation.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Background}
+\label{sec:background}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{The Cost Barrier in Robotics}
+
+The high cost of capable robots is a well-known obstacle to democratising robotics research.
+Commercially available research platforms include TurtleBot (\$500--\$1500), Universal Robots
+arms (\$30,000+), and Boston Dynamics Spot (\$75,000+). Even the relatively affordable
+Raspberry Pi-based robots require dedicated cameras, compute, and sensors that add up quickly.
+
+\subsection{Smartphones as Embedded Computers}
+
+The computational performance of smartphones has grown exponentially over the past decade.
+A flagship smartphone SoC from 2023 (e.g., Snapdragon 8 Gen 2, Apple A16) delivers more
+compute than a desktop computer from a decade ago. Importantly, even mid-range devices include
+neural processing units capable of running machine learning inference at tens of milliseconds
+per frame \citep{openbot2021}.
+
+\subsection{TensorFlow Lite and Mobile AI}
+
+The TensorFlow Lite framework \citep{tflite} allows deploying neural network models on
+mobile and embedded devices with minimal dependencies. It supports hardware acceleration via:
+\begin{itemize}
+    \item GPU Delegate (OpenGL ES / Metal)
+    \item NNAPI Delegate (Android Neural Networks API)
+    \item Hexagon DSP Delegate (Qualcomm devices)
+\end{itemize}
+This makes on-device AI inference practical for real-time robotics workloads.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{OpenBot Paper Summary}
+\label{sec:paper_summary}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Research Problem}
+
+M\"{u}ller and Koltun \citep{openbot2021} identified that the cost and complexity of existing
+robotic platforms prevents broad participation in autonomous robotics research. Their goal was
+to design a complete robot system — hardware and software — that any motivated individual
+could build and use for serious research.
+
+\subsection{Key Idea}
+
+The key contribution is the observation that a commodity smartphone already contains all the
+sensing and computing components needed for a capable robot brain. The remaining requirement
+is a simple, cheap mechanical body for locomotion. This body can be built for approximately
+\$50 using 3D-printed parts, off-the-shelf motors, and an Arduino Nano microcontroller.
+
+\subsection{Main Contributions}
+
+\begin{enumerate}
+    \item A 3D-printable robot body design (chassis, motor mounts, phone holder)
+    \item An Android application for teleoperation, sensor logging, and autonomous control
+    \item A person-following model (MobileNet-SSD based) trained on collected data
+    \item An autonomous navigation model (CNN, imitation learning from human demonstrations)
+    \item A data collection pipeline for gathering training data with the robot
+    \item Open-source release of all hardware designs, software, and trained models
+\end{enumerate}
+
+\subsection{Results}
+
+The paper reports the following experimental results:
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Task} & \textbf{Metric} & \textbf{Result} \\
+\midrule
+Person Following (indoor) & Success rate & $\approx$87\% \\
+Person Following (outdoor) & Success rate & $\approx$78\% \\
+Autonomous Navigation & Path completion rate & $\approx$72\% \\
+Inference speed (mid-range phone) & Frames per second & 15--30 fps \\
+Total hardware cost & USD & $\approx$\$50 \\
+\bottomrule
+\end{tabular}
+\caption{OpenBot experimental results \citep{openbot2021}}
+\end{table}
+
+These results demonstrate that the smartphone-robot system is competitive with much more
+expensive platforms for well-defined navigation and person-following tasks.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Proposed Architecture}
+\label{sec:architecture}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{mobot\_core} architecture follows the same two-layer design as OpenBot, separating
+high-level intelligence (smartphone) from low-level actuation (microcontroller).
+
+\subsection{Smartphone Layer}
+
+The smartphone handles:
+\begin{itemize}
+    \item \textbf{Perception}: Capturing camera frames and processing them with TFLite models.
+    \item \textbf{State estimation}: Reading built-in IMU and GPS sensors.
+    \item \textbf{Control}: Computing left/right wheel speed commands from perception outputs.
+    \item \textbf{Communication}: Sending commands and receiving sensor feedback via USB serial.
+    \item \textbf{Logging}: Recording all sensor and image data for training and analysis.
+\end{itemize}
+
+\subsection{Microcontroller Layer}
+
+The Arduino Nano handles:
+\begin{itemize}
+    \item Parsing incoming serial commands from the smartphone.
+    \item Setting PWM duty cycle on the L298N motor driver.
+    \item Reading wheel encoder interrupts for odometry.
+    \item Reading the HC-SR04 sonar sensor.
+    \item Broadcasting sensor data to the smartphone.
+\end{itemize}
+
+\subsection{Communication Interface}
+
+The smartphone communicates with the Arduino over USB serial (USB OTG) at 115,200 baud using
+a simple text protocol:
+
+\begin{lstlisting}[language=C, caption=Serial communication protocol]
+// Phone -> Arduino
+{l:150,r:150}        // Set left/right motor speeds (0-255)
+
+// Arduino -> Phone
+{l:148,r:152,s:45}   // Left speed, right speed, sonar (cm)
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Hardware Design}
+\label{sec:hardware}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Bill of Materials}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Description} & \textbf{Cost (USD)} \\
+\midrule
+3D-printed chassis & PLA, differential drive frame & \$2--5 \\
+TT gear motors $\times$ 2 & DC, 3--6V, ~150 RPM & \$4--8 \\
+L298N motor driver & Dual H-bridge PWM & \$2--3 \\
+Arduino Nano & ATmega328P microcontroller & \$3--5 \\
+HC-SR04 sonar & Ultrasonic distance sensor & \$1--2 \\
+Wheel encoders $\times$ 2 & Optical slotted disc + IR sensor & \$1--2 \\
+2S LiPo battery & 7.4V, 1000--2000 mAh & \$8--12 \\
+USB power bank & 5V/2A for phone charging & \$8--12 \\
+Wheels and casters & 65mm wheels + caster ball & \$3--5 \\
+USB OTG cable & Type-C or Micro-USB to Type-A & \$1--2 \\
+Miscellaneous & Wires, fasteners, connectors & \$2--3 \\
+\midrule
+\textbf{Total} & & \textbf{\$35--59} \\
+\bottomrule
+\end{tabular}
+\caption{Bill of materials for mobot\_core robot body}
+\end{table}
+
+\subsection{Power Architecture}
+
+Two independent power rails are used:
+\begin{itemize}
+    \item \textbf{7.4V rail}: 2S LiPo $\rightarrow$ L298N $\rightarrow$ Motors; L298N 5V output
+          $\rightarrow$ Arduino Nano.
+    \item \textbf{5V rail}: USB power bank $\rightarrow$ Smartphone (via USB charging cable).
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Software Design}
+\label{sec:software}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Android Application Layers}
+
+The Android application is structured in four layers:
+
+\begin{enumerate}
+    \item \textbf{Communication Layer}: USB serial driver, Bluetooth serial (optional).
+    \item \textbf{Sensor Collection Layer}: CameraX, SensorManager, serial reader.
+    \item \textbf{Perception Layer}: TensorFlow Lite inference engine, model management.
+    \item \textbf{Control Layer}: Drive mode state machine, PID control, command generation.
+\end{enumerate}
+
+\subsection{Drive Modes}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Mode} & \textbf{Description} \\
+\midrule
+Manual & On-screen joystick or Bluetooth gamepad control \\
+Person Following & AI detects person and steers towards them \\
+Autonomous Navigation & CNN maps camera frames to wheel speeds \\
+Data Collection & Human drives while app records camera and sensors \\
+\bottomrule
+\end{tabular}
+\caption{Android application drive modes}
+\end{table}
+
+\subsection{AI Models}
+
+\begin{itemize}
+    \item \textbf{Person Detection}: MobileNet-SSD V2 (COCO pretrained), 300$\times$300 input,
+          ~50--100 ms inference on CPU.
+    \item \textbf{Navigation CNN}: Custom architecture trained via imitation learning, maps
+          camera image to left/right speed command.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Use Cases}
+\label{sec:use_cases}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\texttt{mobot\_core} targets the following primary use cases:
+
+\begin{description}
+    \item[Education] Affordable hands-on robotics and AI learning platform for students.
+    \item[Robotics research] Low-cost platform for imitation learning, visual navigation, and
+          sensor fusion experiments.
+    \item[Person following] Track and follow a specific person indoors and outdoors.
+    \item[Autonomous navigation] Learn and replay navigation paths from human demonstrations.
+    \item[Dataset collection] Collect labelled camera and sensor data for training AI models.
+    \item[Social/assistive robotics] Companion or guide robot using the phone screen and speaker.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Limitations}
+\label{sec:limitations}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following limitations are inherent to the low-cost commodity-hardware approach:
+
+\begin{itemize}
+    \item \textbf{Smartphone compatibility}: Performance varies significantly across devices.
+          USB OTG support is not universal.
+    \item \textbf{Battery life}: Approximately 30--60 minutes of motor operation; the phone
+          battery drains quickly with continuous AI inference.
+    \item \textbf{Sensor accuracy}: Consumer-grade IMU suffers from drift; sonar has limited
+          angular coverage; GPS is unavailable indoors.
+    \item \textbf{Real-time performance}: Android is not a real-time OS. End-to-end latency
+          is 100--200 ms, limiting maximum safe operating speed.
+    \item \textbf{Mechanical stability}: TT motors are not precisely matched; chassis can flex;
+          performance degrades on uneven terrain.
+    \item \textbf{Safety}: No hardware emergency stop; communication dropout risks.
+    \item \textbf{Hardware variability}: Off-the-shelf components from different suppliers
+          may have different characteristics.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Future Work}
+\label{sec:future_work}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following development phases are planned for \texttt{mobot\_core}:
+
+\begin{enumerate}
+    \item \textbf{Arduino firmware}: Command parser, PWM motor control, PID speed control,
+          encoder odometry, sonar reading, watchdog timeout.
+    \item \textbf{Android application (manual)}: USB serial communication, camera preview,
+          on-screen joystick, sensor dashboard, data logging.
+    \item \textbf{Computer vision module}: TFLite person detection, person-following
+          control law, GPU/NNAPI delegate support.
+    \item \textbf{Autonomous navigation}: Imitation learning pipeline, CNN training,
+          model deployment and evaluation.
+    \item \textbf{Dataset collection pipeline}: Structured recording, export to standard formats.
+    \item \textbf{SLAM support}: Visual-inertial odometry (ARCore), topological map building.
+    \item \textbf{Simulation environment}: Gazebo or PyBullet model of the robot body.
+    \item \textbf{Hardware evaluation}: Systematic testing of all components.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Conclusion}
+\label{sec:conclusion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+This report has documented the research foundation of \texttt{mobot\_core}, a project
+exploring smartphone-powered robotics. The central insight — that commodity smartphones
+are capable sensing and computing platforms that can serve as robot brains — has been
+validated empirically by the OpenBot project \citep{openbot2021}.
+
+The key advantages of this approach are:
+\begin{itemize}
+    \item \textbf{Low cost}: A complete robot system for under \$60.
+    \item \textbf{Capable AI}: On-device TFLite inference with GPU/NPU acceleration.
+    \item \textbf{Rich sensing}: Camera, IMU, GPS, and wireless communication included.
+    \item \textbf{Accessible}: Standard Android development tools and open-source ecosystem.
+\end{itemize}
+
+The \texttt{mobot\_core} project will build on this foundation to deliver a complete,
+well-documented, open-source smartphone robotics platform. This documentation repository
+serves as the knowledge base for all subsequent implementation work.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
